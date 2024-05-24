@@ -926,18 +926,23 @@ RUN apt-get update \\
             autoconf \\
             automake \\
             build-essential \\
+            cmake \\
             git \\
             gperf \\
             libre2-dev \\
             libssl-dev \\
             libtool \\
+            libboost-dev \\
             libcurl4-openssl-dev \\
             libb64-dev \\
             libgoogle-perftools-dev \\
             patchelf \\
             python3-dev \\
+            python3-docker \\
             python3-pip \\
             python3-setuptools \\
+            python3-wheel \\
+            python3-virtualenv \\
             rapidjson-dev \\
             scons \\
             software-properties-common \\
@@ -950,29 +955,6 @@ RUN apt-get update \\
             libnuma-dev \\
             wget \\
       && rm -rf /var/lib/apt/lists/*
-
-RUN pip3 install --upgrade pip \\
-      && pip3 install --upgrade \\
-          wheel \\
-          setuptools \\
-          docker \\
-          virtualenv
-
-# Install boost version >= 1.78 for boost::span
-# Current libboost-dev apt packages are < 1.78, so install from tar.gz
-RUN wget -O /tmp/boost.tar.gz \\
-          https://archives.boost.io/release/1.80.0/source/boost_1_80_0.tar.gz \\
-      && (cd /tmp && tar xzf boost.tar.gz) \\
-      && mv /tmp/boost_1_80_0/boost /usr/include/boost
-
-# Server build requires recent version of CMake (FetchContent required)
-RUN apt update -q=2 \\
-      && apt install -y gpg wget \\
-      && wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - |  tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null \\
-      && . /etc/os-release \\
-      && echo "deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ $UBUNTU_CODENAME main" | tee /etc/apt/sources.list.d/kitware.list >/dev/null \\
-      && apt-get update -q=2 \\
-      && apt-get install -y --no-install-recommends cmake=3.27.7* cmake-data=3.27.7*
 """
 
         if FLAGS.enable_gpu:
@@ -1178,11 +1160,12 @@ ENV TRITON_SERVER_GPU_ENABLED    {gpu_enabled}
 # non-root. Make sure that this user to given ID 1000. All server
 # artifacts copied below are assign to this user.
 ENV TRITON_SERVER_USER=triton-server
-RUN userdel tensorrt-server > /dev/null 2>&1 || true \\
-      && if ! id -u $TRITON_SERVER_USER > /dev/null 2>&1 ; then \\
-          useradd $TRITON_SERVER_USER; \\
-        fi \\
-      && [ `id -u $TRITON_SERVER_USER` -eq 1000 ] \\
+RUN userdel tensorrt-server > /dev/null 2>&1 || true \
+    && userdel ubuntu > /dev/null 2>&1 || true \
+      && if ! id -u $TRITON_SERVER_USER > /dev/null 2>&1 ; then \
+          useradd $TRITON_SERVER_USER; \
+        fi \
+      && [ `id -u $TRITON_SERVER_USER` -eq 1000 ] \
       && [ `id -g $TRITON_SERVER_USER` -eq 1000 ]
 
 # Ensure apt-get won't prompt for selecting options
@@ -1202,7 +1185,7 @@ RUN apt-get update \\
               libgoogle-perftools-dev \\
               libjemalloc-dev \\
               libnuma-dev \\
-              libre2-9 \\
+              libre2-10 \\
               software-properties-common \\
               wget \\
               {backend_dependencies} \\
@@ -1419,7 +1402,7 @@ def create_build_dockerfiles(
             FLAGS.upstream_container_version
         )
     else:
-        base_image = "ubuntu:22.04"
+        base_image = "ubuntu:24.04"
 
     dockerfileargmap = {
         "NVIDIA_BUILD_REF": "" if FLAGS.build_sha is None else FLAGS.build_sha,
